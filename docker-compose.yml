@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Service 1: The Database (Postgres)
+  postgres:
+    image: postgres:15-alpine
+    container_name: drift_postgres
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: feature_store
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mlops-network
+
+  # Service 2: Your ML Application (Where code runs)
+  ml-app:
+    build: .
+    container_name: drift_ml_app
+    volumes:
+      - .:/app  # Syncs your local folder to the container
+    ports:
+      - "8000:8000" # For FastAPI
+      - "4200:4200" # For Prefect
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/feature_store
+    depends_on:
+      - postgres
+    networks:
+      - mlops-network
+
+  # Service 3: Prometheus (The Recorder)
+  prometheus:
+    image: prom/prometheus
+    container_name: drift_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - mlops-network
+
+  # Service 4: Grafana (The Dashboard)
+  grafana:
+    image: grafana/grafana
+    container_name: drift_grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - mlops-network
+
+volumes:
+  postgres_data:
+
+networks:
+  mlops-network:

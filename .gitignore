@@ -1,0 +1,21 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data (We generate this via script, so don't push the CSVs)
+data/
+*.csv
+*.json
+
+# Environment variables (Security)
+.env
+
+# Mac/Windows OS files
+.DS_Store
+Thumbs.db
+
+# Virtual Environment (if you made one locally)
+venv/
+.venv/
+env/
