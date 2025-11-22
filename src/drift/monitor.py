@@ -12,51 +12,62 @@ from src.database.db import load_data
 
 # CONFIG
 DRIFT_REPORT_PATH = "data/drift_report.json"
+REFERENCE_WINDOW_SIZE = 500  # First N records as baseline
+CURRENT_WINDOW_SIZE = 30     # Last N records for comparison
 
 def detect_drift():
     print("Starting Drift Check...")
     
-    # 1. Load Reference Data (The "Good" History)
-    # We take the first 500 rows as our baseline of "normal" behavior
-    print("Fetching Reference Data...")
-    reference_df = load_data("SELECT temperature, humidity, demand FROM features ORDER BY date ASC LIMIT 500")
-    
-    # 2. Load Current Data (The "New" Stuff)
-    # We take the last 30 days. If this looks different from Reference, we have drift.
-    print("Fetching Current Data...")
-    current_df = load_data("SELECT temperature, humidity, demand FROM features ORDER BY date DESC LIMIT 30")
-    
-    # 3. Run Evidently Report
-    # This runs statistical tests on every column
-    print("Running Statistical Tests (Evidently AI)...")
-    report = Report(metrics=[DataDriftPreset()])
-    report.run(reference_data=reference_df, current_data=current_df)
-    
-    # 4. Parse Result
-    report_dict = report.as_dict()
-    
-    # The result structure is deeply nested, we extract the boolean flag
-    drift_detected = report_dict['metrics'][0]['result']['dataset_drift']
-    
-    # 5. Save Report (For debugging/Grafana later)
-    with open(DRIFT_REPORT_PATH, 'w') as f:
-        json.dump(report_dict, f)
+    try:
+        # 1. Load Reference Data (The "Good" History)
+        print("Fetching Reference Data...")
+        reference_df = load_data(
+            f"SELECT temperature, humidity, demand FROM features ORDER BY date ASC LIMIT {REFERENCE_WINDOW_SIZE}"
+        )
         
-    if drift_detected:
-        print("DRIFT DETECTED! Data distribution has significantly changed.")
-        return True
-    else:
-        print("Data is stable. No retraining needed.")
-        return False
+        if len(reference_df) < REFERENCE_WINDOW_SIZE:
+            print(f"⚠ Warning: Reference data has only {len(reference_df)} records (need {REFERENCE_WINDOW_SIZE})")
+        
+        # 2. Load Current Data (The "New" Stuff)
+        print("Fetching Current Data...")
+        current_df = load_data(
+            f"SELECT temperature, humidity, demand FROM features ORDER BY date DESC LIMIT {CURRENT_WINDOW_SIZE}"
+        )
+        
+        if len(current_df) < CURRENT_WINDOW_SIZE:
+            print(f"⚠ Warning: Current data has only {len(current_df)} records (need {CURRENT_WINDOW_SIZE})")
+        
+        # 3. Run Evidently Report
+        print("Running Statistical Tests (Evidently AI)...")
+        report = Report(metrics=[DataDriftPreset()])
+        report.run(reference_data=reference_df, current_data=current_df)
+        
+        # 4. Parse Result
+        report_dict = report.as_dict()
+        
+        # The result structure is deeply nested, we extract the boolean flag
+        drift_detected = report_dict['metrics'][0]['result']['dataset_drift']
+        
+        # 5. Save Report (For debugging/Grafana later)
+        with open(DRIFT_REPORT_PATH, 'w') as f:
+            json.dump(report_dict, f, indent=2)
+        
+        if drift_detected:
+            print("🚨 DRIFT DETECTED! Data distribution has significantly changed.")
+            return True
+        else:
+            print("✓ Data is stable. No retraining needed.")
+            return False
+            
+    except Exception as e:
+        print(f"✗ Drift detection failed: {e}")
+        raise
 
 if __name__ == "__main__":
     try:
         is_drifted = detect_drift()
         # Exit with code 1 if drift detected (useful for CI/CD/Prefect)
-        if is_drifted:
-            sys.exit(1) 
-        else:
-            sys.exit(0)
+        sys.exit(1 if is_drifted else 0)
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"✗ Error: {e}")
         sys.exit(1)

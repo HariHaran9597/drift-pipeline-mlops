@@ -53,6 +53,7 @@ if __name__ == "__main__":
     print("Pushing data to Postgres...")
     try:
         save_data(data, "features", if_exists='replace')
-        print("🎉 Database successfully populated with historical data!")
+        print(f"✓ Database successfully populated with {len(data)} historical records!")
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"✗ Error: {e}")
+        sys.exit(1)
